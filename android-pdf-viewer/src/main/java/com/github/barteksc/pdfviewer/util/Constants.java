@@ -38,6 +38,8 @@ public class Constants {
         public static int CACHE_SIZE = 120;
 
         public static int THUMBNAILS_CACHE_SIZE = 8;
+
+        public static int THUMBNAILS_CACHE_SIZE_MIN = 3;
     }
 
     public static class Pinch {

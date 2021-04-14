@@ -102,6 +102,7 @@ public class PDFView extends RelativeLayout {
     private float minZoom = DEFAULT_MIN_SCALE;
     private float midZoom = DEFAULT_MID_SCALE;
     private float maxZoom = DEFAULT_MAX_SCALE;
+    private boolean partRender;
 
     /**
      * START - scrolling in first page direction
@@ -310,6 +311,32 @@ public class PDFView extends RelativeLayout {
 
     public void jumpTo(int page) {
         jumpTo(page, false);
+    }
+
+    public void jumpToWithOffset(int page, boolean withAnimation) {
+        if (!pageSnap || pdfFile == null || pdfFile.getPagesCount() == 0) {
+            return;
+        }
+        SnapEdge edge = findSnapEdge(page);
+        if (edge == SnapEdge.NONE) {
+            return;
+        }
+
+        float offset = -snapOffsetForPage(page, edge);
+        if (swipeVertical) {
+            if (withAnimation) {
+                animationManager.startYAnimation(currentYOffset, offset);
+            } else {
+                moveTo(currentXOffset, offset);
+            }
+        } else {
+            if (withAnimation) {
+                animationManager.startXAnimation(currentXOffset, offset);
+            } else {
+                moveTo(offset, currentYOffset);
+            }
+        }
+        showPage(page);
     }
 
     void showPage(int pageNb) {
@@ -1223,6 +1250,17 @@ public class PDFView extends RelativeLayout {
         this.pageFling = pageFling;
     }
 
+    public boolean isPartRender() {
+        return partRender;
+    }
+
+    private void setPartRender(boolean isPartRender) {
+        partRender = isPartRender;
+        if(!isPartRender){
+            cacheManager.setThumbnailCacheSize(Constants.Cache.THUMBNAILS_CACHE_SIZE_MIN);
+        }
+    }
+
     public boolean isPageFlingEnabled() {
         return pageFling;
     }
@@ -1377,6 +1415,8 @@ public class PDFView extends RelativeLayout {
 
         private boolean nightMode = false;
 
+        private boolean isPartRender = true;
+
         private Configurator(DocumentSource documentSource) {
             this.documentSource = documentSource;
         }
@@ -1521,6 +1561,11 @@ public class PDFView extends RelativeLayout {
             return this;
         }
 
+        public Configurator partRender(boolean isPartRender) {
+            this.isPartRender = isPartRender;
+            return this;
+        }
+
         public void load() {
             if (!hasSize) {
                 waitingDocumentConfigurator = this;
@@ -1552,6 +1597,7 @@ public class PDFView extends RelativeLayout {
             PDFView.this.setFitEachPage(fitEachPage);
             PDFView.this.setPageSnap(pageSnap);
             PDFView.this.setPageFling(pageFling);
+            PDFView.this.setPartRender(isPartRender);
 
             if (pageNumbers != null) {
                 PDFView.this.load(documentSource, password, pageNumbers);

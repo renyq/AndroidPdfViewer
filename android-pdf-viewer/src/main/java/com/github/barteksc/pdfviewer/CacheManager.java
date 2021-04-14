@@ -41,10 +41,16 @@ class CacheManager {
 
     private final PagePartComparator orderComparator = new PagePartComparator();
 
+    private int thumbnailCacheSize = THUMBNAILS_CACHE_SIZE;
+
     public CacheManager() {
         activeCache = new PriorityQueue<>(CACHE_SIZE, orderComparator);
         passiveCache = new PriorityQueue<>(CACHE_SIZE, orderComparator);
         thumbnails = new ArrayList<>();
+    }
+
+    public void setThumbnailCacheSize(int thumbnailsCacheSize) {
+        this.thumbnailCacheSize = thumbnailsCacheSize;
     }
 
     public void cachePart(PagePart part) {
@@ -82,7 +88,7 @@ class CacheManager {
     public void cacheThumbnail(PagePart part) {
         synchronized (thumbnails) {
             // If cache too big, remove and recycle
-            while (thumbnails.size() >= THUMBNAILS_CACHE_SIZE) {
+            while (thumbnails.size() >= thumbnailCacheSize) {
                 thumbnails.remove(0).getRenderedBitmap().recycle();
             }
 

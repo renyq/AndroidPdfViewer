@@ -21,12 +21,15 @@ import android.content.pm.PackageManager;
 import android.database.Cursor;
 import android.graphics.Color;
 import android.net.Uri;
+import android.os.Handler;
+import android.os.Message;
 import android.provider.OpenableColumns;
 import android.support.annotation.NonNull;
 import android.support.v4.app.ActivityCompat;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.widget.Button;
 import android.widget.Toast;
 
 import com.github.barteksc.pdfviewer.PDFView;
@@ -38,17 +41,17 @@ import com.github.barteksc.pdfviewer.util.FitPolicy;
 import com.shockwave.pdfium.PdfDocument;
 
 import org.androidannotations.annotations.AfterViews;
+import org.androidannotations.annotations.Click;
 import org.androidannotations.annotations.EActivity;
 import org.androidannotations.annotations.NonConfigurationInstance;
 import org.androidannotations.annotations.OnActivityResult;
 import org.androidannotations.annotations.OptionsItem;
-import org.androidannotations.annotations.OptionsMenu;
 import org.androidannotations.annotations.ViewById;
 
+import java.lang.ref.WeakReference;
 import java.util.List;
 
 @EActivity(R.layout.activity_main)
-@OptionsMenu(R.menu.options)
 public class PDFViewActivity extends AppCompatActivity implements OnPageChangeListener, OnLoadCompleteListener,
         OnPageErrorListener {
 
@@ -57,11 +60,16 @@ public class PDFViewActivity extends AppCompatActivity implements OnPageChangeLi
     private final static int REQUEST_CODE = 42;
     public static final int PERMISSION_CODE = 42042;
 
-    public static final String SAMPLE_FILE = "sample.pdf";
     public static final String READ_EXTERNAL_STORAGE = "android.permission.READ_EXTERNAL_STORAGE";
 
     @ViewById
     PDFView pdfView;
+
+    @ViewById
+    Button button;
+
+    @ViewById
+    Button button2;
 
     @NonConfigurationInstance
     Uri uri;
@@ -70,6 +78,9 @@ public class PDFViewActivity extends AppCompatActivity implements OnPageChangeLi
     Integer pageNumber = 0;
 
     String pdfFileName;
+    private int mPageCount;
+    private PdfFileProvider mResource;
+    private InnerHandler mHandler;
 
     @OptionsItem(R.id.pickFile)
     void pickFile() {
@@ -102,27 +113,33 @@ public class PDFViewActivity extends AppCompatActivity implements OnPageChangeLi
 
     @AfterViews
     void afterViews() {
-        pdfView.setBackgroundColor(Color.LTGRAY);
+        pdfView.setBackgroundColor(Color.BLACK);
+        mResource = new PdfFileProvider();
         if (uri != null) {
             displayFromUri(uri);
         } else {
-            displayFromAsset(SAMPLE_FILE);
+            displayFromAsset(mResource.getAssetFile());
         }
-        setTitle(pdfFileName);
+        mHandler = new InnerHandler(this);
     }
 
     private void displayFromAsset(String assetFileName) {
+        Log.d(TAG, "displayFromAsset: " + assetFileName);
         pdfFileName = assetFileName;
 
-        pdfView.fromAsset(SAMPLE_FILE)
+        pdfView.fromAsset(assetFileName)
                 .defaultPage(pageNumber)
                 .onPageChange(this)
                 .enableAnnotationRendering(true)
                 .onLoad(this)
-                .scrollHandle(new DefaultScrollHandle(this))
-                .spacing(10) // in dp
+                .scrollHandle(null)
                 .onPageError(this)
                 .pageFitPolicy(FitPolicy.BOTH)
+                .swipeHorizontal(true)
+                .pageSnap(true)
+                .autoSpacing(true)
+                .pageFling(true)
+                .partRender(false)
                 .load();
     }
 
@@ -151,7 +168,7 @@ public class PDFViewActivity extends AppCompatActivity implements OnPageChangeLi
     @Override
     public void onPageChanged(int page, int pageCount) {
         pageNumber = page;
-        setTitle(String.format("%s %s / %s", pdfFileName, page + 1, pageCount));
+        mPageCount = pageCount;
     }
 
     public String getFileName(Uri uri) {
@@ -187,7 +204,15 @@ public class PDFViewActivity extends AppCompatActivity implements OnPageChangeLi
         Log.e(TAG, "modDate = " + meta.getModDate());
 
         printBookmarksTree(pdfView.getTableOfContents(), "-");
+        startPlay();
+    }
 
+    private void startPlay() {
+        if (mHandler.hasMessages(InnerHandler.MSG_NEXT)) {
+            mHandler.removeMessages(InnerHandler.MSG_NEXT);
+        }
+        Message message = mHandler.obtainMessage(InnerHandler.MSG_NEXT);
+        mHandler.sendMessageDelayed(message, InnerHandler.NEXT_TIME);
     }
 
     public void printBookmarksTree(List<PdfDocument.Bookmark> tree, String sep) {
@@ -222,5 +247,51 @@ public class PDFViewActivity extends AppCompatActivity implements OnPageChangeLi
     @Override
     public void onPageError(int page, Throwable t) {
         Log.e(TAG, "Cannot load page " + page);
+    }
+
+    @Click(R.id.button)
+    public void nextPage() {
+        int currentPage = pdfView.getCurrentPage();
+        Log.d(TAG, "nextPage: mPageCount=" + mPageCount);
+        int page = currentPage + 1;
+        if (page > mPageCount - 1) {
+            pageNumber = 0;
+            displayFromAsset(mResource.getAssetFile());
+        } else {
+            Log.d(TAG, "nextPage: page=" + page);
+            pdfView.jumpToWithOffset(page, false);
+        }
+    }
+
+    @Click(R.id.button2)
+    public void prePage() {
+        int currentPage = pdfView.getCurrentPage();
+        int page = Math.max((currentPage - 1), 0);
+        pdfView.jumpToWithOffset(page, false);
+    }
+
+    private static class InnerHandler extends Handler {
+
+        public static final int MSG_NEXT = 1;
+        public static final int NEXT_TIME = 5 * 1000;
+        private final WeakReference<PDFViewActivity> mActivity;
+
+        public InnerHandler(PDFViewActivity pdfViewActivity) {
+            mActivity = new WeakReference<>(pdfViewActivity);
+        }
+
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+                case MSG_NEXT:
+                    PDFViewActivity pdfViewActivity = mActivity.get();
+                    if (pdfViewActivity != null) {
+                        pdfViewActivity.nextPage();
+                        pdfViewActivity.startPlay();
+                    }
+                    break;
+            }
+            super.handleMessage(msg);
+        }
     }
 }

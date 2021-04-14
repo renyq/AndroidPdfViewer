@@ -224,8 +224,12 @@ class PagesLoader {
         return renderRanges;
     }
 
-    private void loadVisible() {
-        int parts = 0;
+    /**
+     * load visible page
+     *
+     * @param isRenderByPart is part render
+     */
+    private void loadVisible(boolean isRenderByPart) {
         float scaledPreloadOffset = preloadOffset;
         float firstXOffset = -xOffset + scaledPreloadOffset;
         float lastXOffset = -xOffset - pdfView.getWidth() - scaledPreloadOffset;
@@ -233,19 +237,21 @@ class PagesLoader {
         float lastYOffset = -yOffset - pdfView.getHeight() - scaledPreloadOffset;
 
         List<RenderRange> rangeList = getRenderRangeList(firstXOffset, firstYOffset, lastXOffset, lastYOffset);
-
+        float ratio = isRenderByPart ? Constants.THUMBNAIL_RATIO : 1.0f;
         for (RenderRange range : rangeList) {
-            loadThumbnail(range.page);
+            loadThumbnail(range.page, ratio);
         }
-
-        for (RenderRange range : rangeList) {
-            calculatePartSize(range.gridSize);
-            parts += loadPage(range.page, range.leftTop.row, range.rightBottom.row, range.leftTop.col, range.rightBottom.col, CACHE_SIZE - parts);
-            if (parts >= CACHE_SIZE) {
-                break;
+        if (isRenderByPart) {
+            int parts = 0;
+            for (RenderRange range : rangeList) {
+                calculatePartSize(range.gridSize);
+                parts += loadPage(range.page, range.leftTop.row, range.rightBottom.row, range.leftTop.col, range
+                        .rightBottom.col, CACHE_SIZE - parts);
+                if (parts >= CACHE_SIZE) {
+                    break;
+                }
             }
         }
-
     }
 
     private int loadPage(int page, int firstRow, int lastRow, int firstCol, int lastCol,
@@ -296,10 +302,10 @@ class PagesLoader {
         return false;
     }
 
-    private void loadThumbnail(int page) {
+    private void loadThumbnail(int page, float thumbnailRatio) {
         SizeF pageSize = pdfView.pdfFile.getPageSize(page);
-        float thumbnailWidth = pageSize.getWidth() * Constants.THUMBNAIL_RATIO;
-        float thumbnailHeight = pageSize.getHeight() * Constants.THUMBNAIL_RATIO;
+        float thumbnailWidth = pageSize.getWidth() * thumbnailRatio;
+        float thumbnailHeight = pageSize.getHeight() * thumbnailRatio;
         if (!pdfView.cacheManager.containsThumbnail(page, thumbnailRect)) {
             pdfView.renderingHandler.addRenderingTask(page,
                     thumbnailWidth, thumbnailHeight, thumbnailRect,
@@ -311,7 +317,6 @@ class PagesLoader {
         cacheOrder = 1;
         xOffset = -MathUtils.max(pdfView.getCurrentXOffset(), 0);
         yOffset = -MathUtils.max(pdfView.getCurrentYOffset(), 0);
-
-        loadVisible();
+        loadVisible(pdfView.isPartRender());
     }
 }
